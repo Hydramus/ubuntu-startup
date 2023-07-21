@@ -1,0 +1,58 @@
+---
+- hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Check if JetBrains Toolbox is installed
+      become: no
+      stat:
+        path: "{{ lookup('env','HOME') }}/.local/share/JetBrains/Toolbox/bin/jetbrains-toolbox"
+      register: jetbrains_toolbox
+
+    - name: Install JetBrains Toolbox
+      become: no
+      block:
+        - name: Fetch the URL of the latest JetBrains Toolbox version
+          shell: curl -s 'https://data.services.jetbrains.com/products/releases?code=TBA&latest=true&type=release' | grep -Po '"linux":.*?[^\\]",' | awk -F ':' '{print $3,":"$4}'| sed 's/[", ]//g'
+          register: toolbox_latest_version
+
+        - name: Download JetBrains Toolbox
+          get_url:
+            url: "{{ toolbox_latest_version.stdout }}"
+            dest: "/tmp"
+            mode: '0755'
+
+        - name: Ensure Toolbox destination directory exists
+          file:
+            path: "{{ lookup('env','HOME') }}/.local/share/JetBrains/Toolbox/bin"
+            state: directory    
+
+        - name: Extract JetBrains Toolbox
+          unarchive:
+            src: "/tmp/{{ toolbox_latest_version.stdout | basename }}"
+            dest: "{{ lookup('env','HOME') }}/.local/share/JetBrains/Toolbox/bin"
+            remote_src: yes
+            extra_opts: [--strip-components=1]
+
+        - name: Make the extracted file executable
+          file:
+            path: "{{ lookup('env','HOME') }}/.local/share/JetBrains/Toolbox/bin/jetbrains-toolbox"
+            mode: '0755'
+
+        - name: Ensure symlink target directory exists
+          file:
+            path: "{{ lookup('env','HOME') }}/.local/bin"
+            state: directory
+            
+        - name: Create symlink
+          file:
+            src: "{{ lookup('env','HOME') }}/.local/share/JetBrains/Toolbox/bin/jetbrains-toolbox"
+            dest: "{{ lookup('env','HOME') }}/.local/bin/jetbrains-toolbox"
+            state: link
+
+        - name: Add local bin to PATH
+          lineinfile:
+            path: "{{ lookup('env','HOME') }}/.bashrc"
+            line: "export PATH=$PATH:{{ lookup('env','HOME') }}/.local/bin"
+            state: present
+      when: not jetbrains_toolbox.stat.exists
+...

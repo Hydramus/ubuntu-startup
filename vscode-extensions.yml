@@ -1,0 +1,29 @@
+---
+- hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Check if Visual Studio Code is installed
+      stat:
+        path: "/usr/bin/code"
+      register: vscode
+      become: no
+
+    - name: Get list of installed VS Code extensions
+      become: no
+      shell: code --list-extensions
+      register: installed_extensions
+      changed_when: False
+
+    - name: Install VS Code extensions
+      become: no
+      command: code --install-extension {{ item }}
+      loop:
+        - esbenp.prettier-vscode
+        - ms-python.python
+        - ms-vscode.powershell
+        - rebornix.ruby
+        - timonwong.shellcheck
+        - redhat.vscode-xml
+        - redhat.vscode-yaml
+        - redhat.ansible
+      when: item not in installed_extensions.stdout_lines

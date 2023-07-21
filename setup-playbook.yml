@@ -1,0 +1,283 @@
+---
+- name: Set up Ubuntu 22 LTS workstation
+  hosts: localhost
+  gather_facts: true
+  become: yes
+  vars:
+    ansible_distribution_release: '22.04'
+  tasks:
+    - name: Install required packages
+      apt:
+        name:
+          - apt-transport-https
+          - wget
+          - curl
+          - gpg
+          - software-properties-common
+          - gnupg2
+          - libfuse2
+          - libxi6
+          - libxrender1
+          - libxtst6
+          - mesa-utils
+          - libfontconfig
+          - libgtk-3-bin
+          - tar
+        state: present
+        update_cache: yes
+
+    - name: Gather package facts
+      ansible.builtin.package_facts:
+        manager: auto
+      
+    - name: Install programming languages (Python, Ruby)
+      apt:
+        name:
+          - python3
+          - python3-pip
+          - ruby
+        state: present
+        update_cache: yes
+
+    - name: Download Google Chrome
+      get_url:
+        url: https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+        dest: /tmp/google-chrome-stable_current_amd64.deb
+      when: "'google-chrome-stable' not in ansible_facts.packages"
+
+    - name: Install Google Chrome
+      apt:
+        deb: /tmp/google-chrome-stable_current_amd64.deb
+        state: present
+      when: "'google-chrome-stable' not in ansible_facts.packages"
+
+    - name: Remove Google Chrome installer
+      file:
+        path: /tmp/google-chrome-stable_current_amd64.deb
+        state: absent
+      when: "'google-chrome-stable' not in ansible_facts.packages"
+
+    - name: Download and Install Microsoft PowerShell GPG key
+      shell: |
+        wget -q https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
+        sudo dpkg -i packages-microsoft-prod.deb
+      when: "'packages-microsoft-prod' not in ansible_facts.packages"
+
+    - name: Remove Microsoft GPG key installer
+      file:
+        path: packages-microsoft-prod.deb
+        state: absent
+
+    - name: Add Microsoft GPG key
+      ansible.builtin.get_url:
+        url: https://packages.microsoft.com/keys/microsoft.asc
+        dest: /etc/apt/trusted.gpg.d/microsoft.asc
+
+    - name: Add Visual Studio Code repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64,signed-by=/etc/apt/trusted.gpg.d/microsoft.asc] https://packages.microsoft.com/repos/code stable main"
+        state: present
+        update_cache: yes
+
+
+    - name: Install Visual Studio Code
+      snap:
+        name: code
+        state: present
+        classic: yes
+    
+    - name: Update repositories cache and install PowerShell
+      apt:
+        update_cache: yes
+        name: powershell
+        state: present
+
+    - name: Install Vagrant and VirtualBox
+      apt:
+        name:
+          - vagrant
+          - virtualbox
+        state: present
+        update_cache: yes
+
+    - name: Install Docker
+      block:
+        - name: Import Docker GPG key
+          ansible.builtin.apt_key:
+            url: https://download.docker.com/linux/ubuntu/gpg
+            state: present
+
+        - name: Add Docker APT repository
+          ansible.builtin.apt_repository:
+            repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable
+            state: present
+            update_cache: yes
+
+        - name: Install Docker packages
+          ansible.builtin.apt:
+            name: 
+              - docker-ce
+              - docker-ce-cli
+              - containerd.io
+            state: present
+            update_cache: yes
+      when: "'docker-ce' not in ansible_facts.packages"
+
+    - name: Install VLC, FFmpeg
+      apt:
+        name:
+          - vlc
+          - ffmpeg
+        state: present
+        update_cache: yes
+
+    - name: Install Zoom dependencies
+      ansible.builtin.apt:
+        name:
+          - libgl1-mesa-glx
+          - libegl1-mesa
+          - libxcb-xtest0
+          - libxcb-cursor0
+        state: present
+
+    - name: Download and Install Zoom
+      shell: |
+        wget https://zoom.us/client/latest/zoom_amd64.deb
+        sudo dpkg -i zoom_amd64.deb
+        sudo apt-get install -f
+      when: "'zoom' not in ansible_facts.packages"
+
+    - name: Remove Zoom installer
+      file:
+        path: zoom_amd64.deb
+        state: absent
+
+    - name: Download and Install TeamViewer
+      shell: |
+        wget https://download.teamviewer.com/download/linux/teamviewer_amd64.deb
+        sudo dpkg -i teamviewer_amd64.deb
+        sudo apt-get install -f
+      when: "'teamviewer' not in ansible_facts.packages"
+
+    
+    - name: Remove TeamViewer installer
+      file:
+        path: teamviewer_amd64.deb
+        state: absent
+
+    - name: Install Caffeine
+      apt:
+        name: caffeine
+        state: present
+        update_cache: yes
+
+    - name: Install Gnome Tweaks
+      apt:
+        name: gnome-tweaks
+        state: present
+        update_cache: yes
+
+    - name: Install Bitwarden
+      snap:
+        name: bitwarden
+        state: present
+        classic: yes
+
+    - name: Install OBS Studio
+      apt:
+        name: obs-studio
+        state: present
+        update_cache: yes
+
+    - name: Install Slack
+      snap:
+        name: slack
+        state: present
+        classic: yes
+
+    - name: Install fingerprint support
+      package:
+        name: libpam-fprintd
+        state: present
+
+    - name: Configure fingerprint authentication
+      lineinfile:
+        path: /etc/pam.d/common-auth
+        line: "auth    sufficient      pam_fprintd.so"
+        state: present
+      become: yes
+
+    - name: Check if Japanese Hiragana keyboard support is installed
+      command: dpkg-query -W -f='${Status}' ibus-anthy
+      register: japanese_hiragana_installed
+      changed_when: false
+      failed_when: false
+
+    - name: Install Japanese Hiragana keyboard support
+      apt:
+        name: ibus-anthy
+        state: present
+      when: japanese_hiragana_installed.stdout != "install ok installed"
+
+    - name: Enable Japanese Hiragana keyboard input
+      command: im-config -n ibus
+      become: yes
+      when: japanese_hiragana_installed.stdout != "install ok installed"
+
+    - name: Check if Chinese Pinyin keyboard support is installed
+      command: dpkg-query -W -f='${Status}' ibus-libpinyin
+      register: chinese_pinyin_installed
+      changed_when: false
+      failed_when: false
+
+    - name: Install Chinese Pinyin keyboard support
+      apt:
+        name: ibus-libpinyin
+        state: present
+      when: chinese_pinyin_installed.stdout != "install ok installed"
+
+    - name: Enable Chinese Pinyin keyboard input
+      command: im-config -n ibus
+      become: yes
+      when: chinese_pinyin_installed.stdout != "install ok installed"
+
+    - name: Check if Japanese language support is installed
+      command: dpkg-query -W -f='${Status}' language-pack-ja
+      register: japanese_language_installed
+      changed_when: false
+      failed_when: false
+
+    - name: Install Japanese language support
+      apt:
+        name: language-pack-ja
+        state: present
+      when: japanese_language_installed.stdout != "install ok installed"
+
+    - name: Check if Chinese Simplified language support is installed
+      command: dpkg-query -W -f='${Status}' language-pack-zh-hans
+      register: chinese_language_installed
+      changed_when: false
+      failed_when: false
+
+    - name: Install Chinese Simplified language support
+      apt:
+        name: language-pack-zh-hans
+        state: present
+      when: chinese_language_installed.stdout != "install ok installed"
+    
+    - name: Install language support packages
+      apt:
+        name:
+          - ibus-libpinyin
+          - gnome-user-docs-zh-hans
+          - ibus-mozc
+          - fonts-arphic-uming
+          - language-pack-gnome-ja
+          - mozc-utils-gui
+          - fonts-noto-cjk-extra
+          - language-pack-gnome-zh-hans
+          - fonts-arphic-ukai
+          - gnome-user-docs-ja
+          - ibus-table-wubi
+        state: present
+        update_cache: yes
