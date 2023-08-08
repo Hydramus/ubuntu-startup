@@ -21,6 +21,7 @@
           - libxtst6
           - mesa-utils
           - libfontconfig
+          - libplist-utils
           - libgtk-3-bin
           - tar
         state: present
